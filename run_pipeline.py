@@ -85,12 +85,20 @@ def parse_args():
                         help='Maximum questions to generate per scene')
     parser.add_argument('--max_questions_per_type', type=int, default=5,
                         help='Maximum questions per type per camera pose')
-    
+    parser.add_argument('--max_tries', type=int, default=300,
+                        help='Maximum camera sampling attempts per object/pair (default: 300)')
+    parser.add_argument('--min_views_required', type=int, default=0,
+                        help='Minimum number of views required per question. '
+                             'Questions with fewer views will be filtered out. '
+                             '0 = no filtering (default: 0)')
+
     # Processing options
     parser.add_argument('--no_intermediate', action='store_true',
                         help='Do not save intermediate per-scene results')
     parser.add_argument('--verbose', action='store_true', default=True,
                         help='Print verbose output')
+    parser.add_argument('--flat_output', action='store_true', default=False,
+                        help='Output directly to output_dir without creating scene subdirectory')
     
     # Rendering options
     parser.add_argument('--enable_rendering', action='store_true', default=False,
@@ -136,7 +144,8 @@ def main():
             move_pattern=args.move_pattern,
             linear_sub_pattern=args.linear_sub_pattern,
             linear_num_steps=args.linear_num_steps,
-            linear_move_distance=args.linear_move_distance
+            linear_move_distance=args.linear_move_distance,
+            max_tries=args.max_tries
         )
         
         question_config = QuestionConfig(
@@ -167,6 +176,7 @@ def main():
             render_config=render_config,
             save_intermediate=not args.no_intermediate,
             max_questions_per_scene=args.max_questions_per_scene,
+            min_views_required=args.min_views_required,
         )
     
     # Override paths from command line if provided
@@ -181,7 +191,7 @@ def main():
     pipeline = InteriorGSQuestionPipeline(config)
     
     if scene_id:
-        results = pipeline.run_single_scene(scene_id, verbose=args.verbose)
+        results = pipeline.run_single_scene(scene_id, verbose=args.verbose, flat_output=args.flat_output)
     else:
         results = pipeline.run(verbose=args.verbose)
     

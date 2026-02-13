@@ -288,15 +288,14 @@ class InteriorGSQuestionPipeline:
             )
             print(f"  Rendered {len(rendered_images)} images")
             
-            # Update questions with image paths (new format: {experiment}/{scene_id}/{move_pattern}/{object}_{view}.png)
-            experiment_name = self.config.experiment_name
+            # Update questions with image paths (format: images/{object}_{view}.png)
             move_pattern = self.config.camera_sampling.move_pattern
             for q in all_questions:
                 pose_idx = q.get('camera_pose_idx')
                 if pose_idx is not None and pose_idx in rendered_images:
-                    # Path relative to output_dir: {experiment}/{scene_id}/{move_pattern}/{filename}
+                    # Path relative to scene_output_dir: images/{filename}
                     image_path = rendered_images[pose_idx]
-                    relative_path = f"{experiment_name}/{scene_name}/{move_pattern}/{image_path.name}"
+                    relative_path = f"images/{image_path.name}"
                     q['image'] = relative_path
         
         # Check max questions per scene
@@ -480,14 +479,13 @@ class InteriorGSQuestionPipeline:
             )
             print(f"  Rendered {len(rendered_images)} images")
             
-            # Update questions with image paths
-            experiment_name = self.config.experiment_name
+            # Update questions with image paths (format: images/{filename})
             move_pattern = self.config.camera_sampling.move_pattern
             for q in all_questions:
                 pose_idx = q.get('camera_pose_idx')
                 if pose_idx is not None and pose_idx in rendered_images:
                     image_path = rendered_images[pose_idx]
-                    relative_path = f"{experiment_name}/{scene_name}/{move_pattern}/{image_path.name}"
+                    relative_path = f"images/{image_path.name}"
                     q['image'] = relative_path
         
         # Check max questions per scene
@@ -502,25 +500,25 @@ class InteriorGSQuestionPipeline:
         """
         Render images for rotation mode camera poses.
         
-        Path format: {experiment_name}/{scene_id}/rotation/{room_name}_{yaw_deg}.png
+        Path format: images/{room_name}_{yaw_deg}.png
         
         Args:
             scene_id: Scene identifier
             camera_poses: List of all CameraPose objects (used for indexing)
             room_cameras: Dictionary mapping room_name -> list of camera poses
-            images_dir: Base directory for images
+            images_dir: Base directory for this scene/pattern (images go into images/ subdirectory)
             
         Returns:
             Dictionary mapping pose_idx to image file path
         """
         rendered = {}
         
-        # Get experiment name and move pattern from config
-        experiment_name = self.config.experiment_name
+        # Get move pattern from config
         move_pattern = self.config.camera_sampling.move_pattern
         
-        # Create output directory: {output_dir}/{experiment_name}/{scene_id}/rotation/
-        exp_scene_pattern_dir = self.output_dir / experiment_name / scene_id / move_pattern
+        # Create output directory: {images_dir}/images/
+        # This keeps the structure clean: InteriorQA/scene_id/pattern/images/*.png
+        exp_scene_pattern_dir = images_dir / "images"
         exp_scene_pattern_dir.mkdir(parents=True, exist_ok=True)
         
         # Build a mapping from pose to its room and yaw
@@ -604,28 +602,28 @@ class InteriorGSQuestionPipeline:
     def _render_camera_poses(self, scene_id: str, camera_poses: List, 
                               images_dir: Path) -> Dict[int, Path]:
         """
-        Render images for all camera poses with new path format.
+        Render images for all camera poses.
         
-        New path format: {experiment_name}/{scene_id}/{move_pattern}/{object_name}_{view_idx}.png
+        Path format: images/{object_name}_{view_idx}.png
         - For single object poses: {object_label}_{view_idx}.png
         - For object pairs: {object1_label}_{object2_label}_{view_idx}.png
         
         Args:
             scene_id: Scene identifier
             camera_poses: List of CameraPose objects
-            images_dir: Base directory (will create subdirectories for experiment/scene/pattern)
+            images_dir: Base directory for this scene/pattern (images go into images/ subdirectory)
             
         Returns:
             Dictionary mapping pose_idx to image file path
         """
         rendered = {}
         
-        # Get experiment name and move pattern from config
-        experiment_name = self.config.experiment_name
+        # Get move pattern from config
         move_pattern = self.config.camera_sampling.move_pattern
         
-        # Create output directory: {output_dir}/{experiment_name}/{scene_id}/{move_pattern}/
-        exp_scene_pattern_dir = self.output_dir / experiment_name / scene_id / move_pattern
+        # Create output directory: {images_dir}/images/
+        # This keeps the structure clean: InteriorQA/scene_id/pattern/images/*.png
+        exp_scene_pattern_dir = images_dir / "images"
         exp_scene_pattern_dir.mkdir(parents=True, exist_ok=True)
         
         # Track view indices per object/pair
@@ -750,6 +748,13 @@ class InteriorGSQuestionPipeline:
             scene_output.mkdir(parents=True, exist_ok=True)
             
             questions = self.process_scene(scene_name, scene_output_dir=scene_output)
+            
+            # Filter by min_views_required if specified
+            # Only apply for around/spherical patterns (linear/rotation have fixed view counts)
+            move_pattern = self.config.camera_sampling.move_pattern
+            if self.config.min_views_required > 0 and questions and move_pattern in ['around', 'spherical']:
+                questions = self._filter_by_min_views(questions, self.config.min_views_required, verbose)
+            
             scene_stats[scene_name] = len(questions)
             
             # Save scene questions
@@ -795,13 +800,14 @@ class InteriorGSQuestionPipeline:
         
         return all_questions
     
-    def run_single_scene(self, scene_name: str, verbose: bool = True) -> List[Dict[str, Any]]:
+    def run_single_scene(self, scene_name: str, verbose: bool = True, flat_output: bool = False) -> List[Dict[str, Any]]:
         """
         Run pipeline for a single scene.
         
         Args:
             scene_name: Name/ID of the scene to process
             verbose: Whether to print progress
+            flat_output: If True, output directly to output_dir without creating scene subdirectory
         
         Returns:
             List of question dictionaries
@@ -814,7 +820,10 @@ class InteriorGSQuestionPipeline:
             print()
         
         # Create scene output directory first (needed for rendering)
-        scene_output = self.output_dir / scene_name
+        if flat_output:
+            scene_output = self.output_dir
+        else:
+            scene_output = self.output_dir / scene_name
         scene_output.mkdir(parents=True, exist_ok=True)
         
         # Process scene with rendering
@@ -823,6 +832,19 @@ class InteriorGSQuestionPipeline:
         if not questions:
             if verbose:
                 print(f"No questions generated for scene {scene_name}")
+            return []
+        
+        # Filter by min_views_required if specified
+        # Only apply for around/spherical patterns (linear/rotation have fixed view counts)
+        move_pattern = self.config.camera_sampling.move_pattern
+        if self.config.min_views_required > 0 and move_pattern in ['around', 'spherical']:
+            questions = self._filter_by_min_views(questions, self.config.min_views_required, verbose)
+        elif self.config.min_views_required > 0 and verbose:
+            print(f"  Skipping min_views filter for '{move_pattern}' pattern (only applies to around/spherical)")
+        
+        if not questions:
+            if verbose:
+                print(f"No questions remaining after min_views filter for scene {scene_name}")
             return []
         
         # Save questions as JSONL
@@ -863,6 +885,49 @@ class InteriorGSQuestionPipeline:
             q_type = q.get('question_type', 'unknown')
             stats[q_type] = stats.get(q_type, 0) + 1
         return stats
+
+    def _filter_by_min_views(self, questions: List[Dict[str, Any]], min_views: int, verbose: bool = True) -> List[Dict[str, Any]]:
+        """
+        Filter questions to keep only those with at least min_views different views.
+        
+        This groups questions by question_id and filters out those with fewer than min_views
+        unique camera_pose_idx values.
+        
+        Args:
+            questions: List of question dictionaries
+            min_views: Minimum number of views required per question_id
+            verbose: Whether to print filtering stats
+            
+        Returns:
+            Filtered list of questions
+        """
+        from collections import defaultdict
+        
+        # Group by question_id to count views
+        question_views = defaultdict(set)
+        for q in questions:
+            q_id = q.get('question_id', '')
+            pose_idx = q.get('camera_pose_idx')
+            if pose_idx is not None:
+                question_views[q_id].add(pose_idx)
+        
+        # Find question_ids with enough views
+        valid_question_ids = {
+            q_id for q_id, views in question_views.items()
+            if len(views) >= min_views
+        }
+        
+        # Filter questions
+        filtered = [q for q in questions if q.get('question_id', '') in valid_question_ids]
+        
+        if verbose:
+            original_qids = len(question_views)
+            filtered_qids = len(valid_question_ids)
+            removed_qids = original_qids - filtered_qids
+            print(f"  Min views filter (>={min_views}): {len(questions)} -> {len(filtered)} entries")
+            print(f"  Removed {removed_qids} unique question_ids with fewer than {min_views} views")
+        
+        return filtered
 
 
 def run_pipeline(scenes_root: str, output_dir: str, 

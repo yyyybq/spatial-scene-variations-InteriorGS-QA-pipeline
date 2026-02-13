@@ -192,6 +192,7 @@ class PipelineConfig:
     # Processing options
     save_intermediate: bool = True  # Save intermediate results per scene
     max_questions_per_scene: int = 1000  # Maximum questions per scene
+    min_views_required: int = 0  # Minimum views required per question (0 = no filtering)
     
     @classmethod
     def from_dict(cls, config_dict: Dict[str, Any]) -> 'PipelineConfig':
