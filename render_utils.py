@@ -74,13 +74,10 @@ class SceneRenderer:
             return
         
         # Add VAGEN env path for imports - adjust path as needed
-        # You can set VAGEN_PATH environment variable or modify vagen_paths below
-        import os
         vagen_paths = [
-            Path(__file__).parent.parent.parent / "VAGEN",
+            Path(__file__).parent.parent.parent / "Active_Spatial" / "VAGEN",
+            Path("/scratch/by2593/project/Active_Spatial/VAGEN"),
         ]
-        if os.environ.get("VAGEN_PATH"):
-            vagen_paths.insert(0, Path(os.environ["VAGEN_PATH"]))
         
         for vagen_path in vagen_paths:
             if vagen_path.exists() and str(vagen_path) not in sys.path:
