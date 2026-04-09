@@ -58,17 +58,34 @@ class QuestionGenerator:
             
             try:
                 if q_type == 'object_size':
-                    qa = question_utils.construct_object_size_qa(obj)
+                    for dimension in self.config.dimensions:
+                        qa = question_utils.construct_object_size_qa(obj, dimension)
+                        if qa:
+                            qa['camera_pose'] = camera_pose.to_dict()
+                            questions.append(qa)
                 elif q_type == 'object_distance_to_camera':
                     qa = question_utils.construct_object_distance_to_camera_qa(obj, camera_pose)
+                    if qa:
+                        qa['camera_pose'] = camera_pose.to_dict()
+                        questions.append(qa)
                 else:
                     continue
-                
-                if qa:
-                    qa['camera_pose'] = camera_pose.to_dict()
-                    questions.append(qa)
             except Exception as e:
                 print(f"Warning: Failed to generate {q_type} question: {e}")
+        
+        # Generate MC versions of single-object questions
+        if 'mc' in self.config.enabled_question_types:
+            try:
+                for dimension in self.config.dimensions:
+                    mc_qa = question_utils.construct_mc_object_size_qa(obj, dimension)
+                    if mc_qa:
+                        mc_qa['camera_pose'] = camera_pose.to_dict()
+                        questions.append(mc_qa)
+                mc_qa = question_utils.construct_mc_object_distance_to_camera_qa(obj, camera_pose)
+                if mc_qa:
+                    questions.append(mc_qa)
+            except Exception as e:
+                print(f"Warning: Failed to generate MC single-object question: {e}")
         
         return questions
     
@@ -132,8 +149,31 @@ class QuestionGenerator:
                     if qa:
                         questions.append(qa)
                 
+                elif q_type == 'relative_size':
+                    qa = question_utils.construct_relative_size_qa(obj1, obj2)
+                    if qa:
+                        qa['camera_pose'] = camera_pose.to_dict()
+                        questions.append(qa)
+                
+                elif q_type == 'relative_distance_to_camera':
+                    qa = question_utils.construct_relative_distance_to_camera_qa(
+                        obj1, obj2, camera_pose
+                    )
+                    if qa:
+                        questions.append(qa)
+                
             except Exception as e:
                 print(f"Warning: Failed to generate {q_type} question: {e}")
+        
+        # Generate MC version of pair distance question
+        if 'mc' in self.config.enabled_question_types:
+            try:
+                mc_qa = question_utils.construct_mc_object_pair_distance_center_qa(obj1, obj2)
+                if mc_qa:
+                    mc_qa['camera_pose'] = camera_pose.to_dict()
+                    questions.append(mc_qa)
+            except Exception as e:
+                print(f"Warning: Failed to generate MC pair question: {e}")
         
         return questions
     
@@ -204,6 +244,26 @@ class QuestionGenerator:
                             
                             qa = question_utils.construct_object_comparison_relative_distance_qa(
                                 obj_a, obj_b, obj_x, obj_y
+                            )
+                            if qa:
+                                qa['camera_pose'] = camera_pose.to_dict()
+                                type_questions.append(qa)
+                            
+                            if len(type_questions) >= max_questions_per_type:
+                                break
+                
+                elif q_type == 'relative_distance':
+                    # Use pivot structure: for each primary object, sample 2 others
+                    # All objects in the list should already be visible in the current camera
+                    if len(objects) >= 3:
+                        for primary_obj in objects:
+                            other_objects = [o for o in objects if o.id != primary_obj.id]
+                            if len(other_objects) < 2:
+                                continue
+                            obj2, obj3 = random.sample(other_objects, 2)
+                            
+                            qa = question_utils.construct_relative_distance_qa(
+                                primary_obj, obj2, obj3
                             )
                             if qa:
                                 qa['camera_pose'] = camera_pose.to_dict()

@@ -67,26 +67,31 @@ def transform_vector_to_camera_space(vector: np.ndarray, camera_pose: CameraPose
 # SINGLE OBJECT QUESTION CONSTRUCTORS
 # ==============================================================================
 
-def construct_object_size_qa(obj: SceneObject) -> Dict[str, Any]:
+def construct_object_size_qa(obj: SceneObject, dimension: str = 'length') -> Dict[str, Any]:
     """
-    Constructs a question about the dimensions (length, width, height) of an object.
+    Constructs a question about a single dimension (length, width, or height) of an object.
     """
     obj_length, obj_width, obj_height = get_object_size(obj)
     
-    rounded_length = round(obj_length, 1)
-    rounded_width = round(obj_width, 1)
-    rounded_height = round(obj_height, 1)
+    if dimension == 'length':
+        value = obj_length
+    elif dimension == 'width':
+        value = obj_width
+    else:  # height
+        value = obj_height
     
-    answer_string = f"[{rounded_length}, {rounded_width}, {rounded_height}]"
+    rounded_value = round(value, 2)
     
     return {
         "question": " ".join([
-            question_templates.OBJECT_SIZE_TEMPLATE.format(object=obj.label),
-            question_templates.POST_PROMPT
+            question_templates.OBJECT_SIZE_TEMPLATE.format(object=obj.label, dimension=dimension),
+            question_templates.NA_POST_PROMPT,
+            question_templates.POST_PROMPT_NA
         ]),
-        "answer": answer_string,
+        "answer": str(rounded_value),
+        "answer_type": "numerical",
         "question_type": "object_size",
-        "question_id": f"object_size_{obj.id}",
+        "question_id": f"object_size_{obj.id}_{dimension}",
         "primary_object": obj.id,
         "objects": [obj.to_dict()],
     }
@@ -97,16 +102,17 @@ def construct_object_distance_to_camera_qa(obj: SceneObject, camera_pose: Camera
     Constructs a question about the distance of an object from the camera.
     """
     distance = calculate_distance_to_camera(obj, camera_pose)
-    rounded_distance = round(distance, 1)
+    rounded_distance = round(distance, 2)
     
     return {
         "question": " ".join([
             question_templates.OBJECT_DISTANCE_TO_CAMERA_TEMPLATE.format(object=obj.label),
             question_templates.DISTANCE_POST_PROMPT,
             question_templates.NA_POST_PROMPT,
-            question_templates.POST_PROMPT
+            question_templates.POST_PROMPT_NA
         ]),
         "answer": str(rounded_distance),
+        "answer_type": "numerical",
         "question_type": "object_distance_to_camera",
         "question_id": f"object_distance_to_camera_{obj.id}",
         "primary_object": obj.id,
@@ -134,7 +140,7 @@ def construct_object_size_comparison_relative_qa(obj1: SceneObject, obj2: SceneO
     else:  # height
         ratio = obj1_height / (obj2_height + 1e-9)
     
-    rounded_ratio = round(ratio, 1)
+    rounded_ratio = round(ratio, 2)
     
     return {
         "question": " ".join([
@@ -142,9 +148,10 @@ def construct_object_size_comparison_relative_qa(obj1: SceneObject, obj2: SceneO
                 dimension=dimension, object1=obj1.label, object2=obj2.label
             ),
             question_templates.NA_POST_PROMPT,
-            question_templates.POST_PROMPT
+            question_templates.POST_PROMPT_NA
         ]),
         "answer": str(rounded_ratio),
+        "answer_type": "numerical",
         "question_type": "object_size_comparison_relative",
         "question_id": f"object_size_comparison_relative_{obj1.id}_{obj2.id}_{dimension}",
         "primary_object": obj1.id,
@@ -170,8 +177,8 @@ def construct_object_size_comparison_absolute_qa(obj1: SceneObject, obj2: SceneO
         obj1_dim = obj1_height
         obj2_dim = obj2_height
     
-    rounded_obj1_dim = round(obj1_dim, 1)
-    rounded_obj2_dim = round(obj2_dim, 1)
+    rounded_obj1_dim = round(obj1_dim, 2)
+    rounded_obj2_dim = round(obj2_dim, 2)
     
     return {
         "question": " ".join([
@@ -182,9 +189,10 @@ def construct_object_size_comparison_absolute_qa(obj1: SceneObject, obj2: SceneO
                 object2=obj2.label
             ),
             question_templates.NA_POST_PROMPT,
-            question_templates.POST_PROMPT
+            question_templates.POST_PROMPT_NA
         ]),
         "answer": str(rounded_obj1_dim),
+        "answer_type": "numerical",
         "question_type": "object_size_comparison_absolute",
         "question_id": f"object_size_comparison_absolute_{obj1.id}_{obj2.id}_{dimension}",
         "primary_object": obj1.id,
@@ -197,7 +205,7 @@ def construct_object_pair_distance_center_qa(obj1: SceneObject, obj2: SceneObjec
     Constructs a question about the distance between the centers of two objects.
     """
     distance = calculate_distance(obj1, obj2)
-    rounded_distance = round(distance, 1)
+    rounded_distance = round(distance, 2)
     
     return {
         "question": " ".join([
@@ -206,9 +214,10 @@ def construct_object_pair_distance_center_qa(obj1: SceneObject, obj2: SceneObjec
             ),
             question_templates.DISTANCE_POST_PROMPT,
             question_templates.NA_POST_PROMPT,
-            question_templates.POST_PROMPT
+            question_templates.POST_PROMPT_NA
         ]),
         "answer": str(rounded_distance),
+        "answer_type": "numerical",
         "question_type": "object_pair_distance_center",
         "question_id": f"object_pair_distance_center_{obj1.id}_{obj2.id}",
         "primary_object": obj1.id,
@@ -235,8 +244,8 @@ def construct_object_pair_distance_center_w_size_qa(obj1: SceneObject, obj2: Sce
     if reference_dim < 0.01:
         return None  # Avoid issues with very small dimensions
     
-    rounded_distance = round(distance, 1)
-    rounded_ref_dim = round(reference_dim, 1)
+    rounded_distance = round(distance, 2)
+    rounded_ref_dim = round(reference_dim, 2)
     
     return {
         "question": " ".join([
@@ -248,9 +257,10 @@ def construct_object_pair_distance_center_w_size_qa(obj1: SceneObject, obj2: Sce
             ),
             question_templates.DISTANCE_POST_PROMPT,
             question_templates.NA_POST_PROMPT,
-            question_templates.POST_PROMPT
+            question_templates.POST_PROMPT_NA
         ]),
         "answer": str(rounded_distance),
+        "answer_type": "numerical",
         "question_type": "object_pair_distance_center_w_size",
         "question_id": f"object_pair_distance_center_w_size_{obj1.id}_{obj2.id}_{dimension}",
         "primary_object": obj1.id,
@@ -270,9 +280,9 @@ def construct_object_pair_distance_vector_qa(obj_a: SceneObject, obj_b: SceneObj
     local_vector = transform_vector_to_camera_space(world_vector, camera_pose)
     
     # Round components
-    rounded_x = round(local_vector[0], 1)
-    rounded_y = round(local_vector[1], 1)
-    rounded_z = round(local_vector[2], 1)
+    rounded_x = round(local_vector[0], 2)
+    rounded_y = round(local_vector[1], 2)
+    rounded_z = round(local_vector[2], 2)
     
     answer_string = f"[{rounded_x}, {rounded_y}, {rounded_z}]"
     
@@ -282,9 +292,11 @@ def construct_object_pair_distance_vector_qa(obj_a: SceneObject, obj_b: SceneObj
                 objectA=obj_a.label, objectB=obj_b.label
             ),
             question_templates.DISTANCE_POST_PROMPT,
-            question_templates.POST_PROMPT
+            question_templates.VECTOR_POST_PROMPT,
+            question_templates.POST_PROMPT_VECTOR
         ]),
         "answer": answer_string,
+        "answer_type": "numerical",
         "question_type": "object_pair_distance_vector",
         "question_id": f"object_pair_distance_vector_{obj_a.id}_{obj_b.id}",
         "primary_object": obj_a.id,
@@ -306,8 +318,8 @@ def construct_object_comparison_absolute_distance_qa(obj_a: SceneObject, obj_b: 
     dist_a_b = calculate_distance(obj_a, obj_b)
     dist_x_y = calculate_distance(obj_x, obj_y)
     
-    rounded_dist_ab = round(dist_a_b, 1)
-    rounded_dist_xy = round(dist_x_y, 1)
+    rounded_dist_ab = round(dist_a_b, 2)
+    rounded_dist_xy = round(dist_x_y, 2)
     
     return {
         "question": " ".join([
@@ -320,9 +332,10 @@ def construct_object_comparison_absolute_distance_qa(obj_a: SceneObject, obj_b: 
             ),
             question_templates.DISTANCE_POST_PROMPT,
             question_templates.NA_POST_PROMPT,
-            question_templates.POST_PROMPT
+            question_templates.POST_PROMPT_NA
         ]),
         "answer": str(rounded_dist_ab),
+        "answer_type": "numerical",
         "question_type": "object_comparison_absolute_distance",
         "question_id": f"object_comparison_absolute_distance_{obj_a.id}_{obj_b.id}_{obj_x.id}_{obj_y.id}",
         "primary_object": obj_a.id,
@@ -342,7 +355,7 @@ def construct_object_comparison_relative_distance_qa(obj_a: SceneObject, obj_b: 
         return None  # Avoid division by zero
     
     distance_ratio = dist_a_b / dist_x_y
-    rounded_ratio = round(distance_ratio, 1)
+    rounded_ratio = round(distance_ratio, 2)
     
     return {
         "question": " ".join([
@@ -354,9 +367,10 @@ def construct_object_comparison_relative_distance_qa(obj_a: SceneObject, obj_b: 
             ),
             question_templates.DISTANCE_POST_PROMPT,
             question_templates.NA_POST_PROMPT,
-            question_templates.POST_PROMPT
+            question_templates.POST_PROMPT_NA
         ]),
         "answer": str(rounded_ratio),
+        "answer_type": "numerical",
         "question_type": "object_comparison_relative_distance",
         "question_id": f"object_comparison_relative_distance_{obj_a.id}_{obj_b.id}_{obj_x.id}_{obj_y.id}",
         "primary_object": obj_a.id,
@@ -367,6 +381,245 @@ def construct_object_comparison_relative_distance_qa(obj_a: SceneObject, obj_b: 
 # ==============================================================================
 # QUESTION CONSTRUCTOR REGISTRY
 # ==============================================================================
+
+# ==============================================================================
+# RELATIVE (YES/NO) QUESTION CONSTRUCTORS
+# ==============================================================================
+
+def _shuffle_yes_no(correct_yes: bool) -> Tuple[str, str, Dict[str, str]]:
+    """
+    Shuffle Yes/No into A/B options. Returns (correct_letter, choices_str, choices_dict).
+    """
+    options = ["Yes", "No"]
+    random.shuffle(options)
+    labels = ['A', 'B']
+    correct_text = "Yes" if correct_yes else "No"
+    correct_letter = labels[options.index(correct_text)]
+    choices_str = "\n".join(f"({labels[i]}) {options[i]}" for i in range(2))
+    choices_dict = {labels[i]: options[i] for i in range(2)}
+    return correct_letter, choices_str, choices_dict
+
+
+def construct_relative_size_qa(obj1: SceneObject, obj2: SceneObject) -> Dict[str, Any]:
+    """
+    Constructs an MC question: Is object1 larger than object2?
+    Compares by volume (length * width * height).
+    """
+    l1, w1, h1 = get_object_size(obj1)
+    l2, w2, h2 = get_object_size(obj2)
+    vol1 = l1 * w1 * h1
+    vol2 = l2 * w2 * h2
+    correct_yes = vol1 > vol2
+    correct_letter, choices_str, choices_dict = _shuffle_yes_no(correct_yes)
+    
+    base_question = question_templates.RELATIVE_SIZE_TEMPLATE.format(
+        object1=obj1.label, object2=obj2.label
+    )
+    
+    return {
+        "question": " ".join([
+            base_question + "\n\n" + choices_str,
+            question_templates.MCA_POST_PROMPT,
+            question_templates.POST_PROMPT_MC
+        ]),
+        "answer": correct_letter,
+        "answer_text": "Yes" if correct_yes else "No",
+        "answer_type": "mc",
+        "question_type": "relative_size",
+        "question_id": f"relative_size_{obj1.id}_{obj2.id}",
+        "primary_object": obj1.id,
+        "objects": [obj1.to_dict(), obj2.to_dict()],
+        "choices": choices_dict,
+    }
+
+
+def construct_relative_distance_qa(obj1: SceneObject, obj2: SceneObject,
+                                    obj3: SceneObject) -> Dict[str, Any]:
+    """
+    Constructs an MC question: Is dist(obj1, obj2) > dist(obj1, obj3)?
+    """
+    dist_12 = calculate_distance(obj1, obj2)
+    dist_13 = calculate_distance(obj1, obj3)
+    correct_yes = dist_12 > dist_13
+    correct_letter, choices_str, choices_dict = _shuffle_yes_no(correct_yes)
+    
+    base_question = question_templates.RELATIVE_DISTANCE_TEMPLATE.format(
+        object1=obj1.label, object2=obj2.label, object3=obj3.label
+    )
+    
+    return {
+        "question": " ".join([
+            base_question + "\n\n" + choices_str,
+            question_templates.MCA_POST_PROMPT,
+            question_templates.POST_PROMPT_MC
+        ]),
+        "answer": correct_letter,
+        "answer_text": "Yes" if correct_yes else "No",
+        "answer_type": "mc",
+        "question_type": "relative_distance",
+        "question_id": f"relative_distance_{obj1.id}_{obj2.id}_{obj3.id}",
+        "primary_object": obj1.id,
+        "objects": [obj1.to_dict(), obj2.to_dict(), obj3.to_dict()],
+        "choices": choices_dict,
+    }
+
+
+def construct_relative_distance_to_camera_qa(obj1: SceneObject, obj2: SceneObject,
+                                              camera_pose: CameraPose) -> Dict[str, Any]:
+    """
+    Constructs an MC question: Is obj1 further from the camera than obj2?
+    """
+    dist1 = calculate_distance_to_camera(obj1, camera_pose)
+    dist2 = calculate_distance_to_camera(obj2, camera_pose)
+    correct_yes = dist1 > dist2
+    correct_letter, choices_str, choices_dict = _shuffle_yes_no(correct_yes)
+    
+    base_question = question_templates.RELATIVE_DISTANCE_TO_CAMERA_TEMPLATE.format(
+        object1=obj1.label, object2=obj2.label
+    )
+    
+    return {
+        "question": " ".join([
+            base_question + "\n\n" + choices_str,
+            question_templates.MCA_POST_PROMPT,
+            question_templates.POST_PROMPT_MC
+        ]),
+        "answer": correct_letter,
+        "answer_text": "Yes" if correct_yes else "No",
+        "answer_type": "mc",
+        "question_type": "relative_distance_to_camera",
+        "question_id": f"relative_distance_to_camera_{obj1.id}_{obj2.id}",
+        "primary_object": obj1.id,
+        "objects": [obj1.to_dict(), obj2.to_dict()],
+        "choices": choices_dict,
+        "camera_pose": camera_pose.to_dict(),
+    }
+
+
+# ==============================================================================
+# MULTIPLE CHOICE (MC) QUESTION CONSTRUCTORS
+# ==============================================================================
+
+def _generate_mc_distractors(correct_value: float, num_distractors: int = 3) -> List[float]:
+    """
+    Generate plausible distractor values for a multiple choice question.
+    Distractors are within ±50-200% of the correct value, rounded to 2 decimal places.
+    """
+    distractors = []
+    attempts = 0
+    while len(distractors) < num_distractors and attempts < 50:
+        attempts += 1
+        # Random multiplier: 0.3x to 2.5x, avoiding 0.85-1.15 (too close)
+        mult = random.choice([
+            random.uniform(0.3, 0.7),
+            random.uniform(1.3, 2.5),
+        ])
+        val = round(correct_value * mult, 2)
+        if val <= 0:
+            val = round(random.uniform(0.1, 2.0), 2)
+        if val not in distractors and val != correct_value:
+            distractors.append(val)
+    # Fallback if not enough distractors
+    while len(distractors) < num_distractors:
+        val = round(correct_value + random.uniform(0.5, 3.0) * random.choice([-1, 1]), 2)
+        if val <= 0:
+            val = round(random.uniform(0.1, 2.0), 2)
+        if val not in distractors and val != correct_value:
+            distractors.append(val)
+    return distractors
+
+
+def _format_mc_question(base_question: str, correct_value: float,
+                         question_id_base: str, primary_object: str,
+                         objects_list: list, mc_source_type: str) -> Dict[str, Any]:
+    """
+    Wrap a numerical question into MC format with A/B/C/D choices.
+    Only uses MCA_POST_PROMPT + POST_PROMPT_MC (no numerical or other conflicting prompts).
+    """
+    distractors = _generate_mc_distractors(correct_value, num_distractors=3)
+    all_values = [correct_value] + distractors
+    random.shuffle(all_values)
+
+    labels = ['A', 'B', 'C', 'D']
+    correct_letter = labels[all_values.index(correct_value)]
+
+    choices_str = "\n".join(
+        f"({labels[i]}) {all_values[i]}" for i in range(4)
+    )
+
+    full_question = " ".join([
+        question_templates.MC_TEMPLATE.format(
+            base_question=base_question,
+            choices=choices_str
+        ),
+        question_templates.MCA_POST_PROMPT,
+        question_templates.POST_PROMPT_MC,
+    ])
+
+    return {
+        "question": full_question,
+        "answer": correct_letter,
+        "answer_value": correct_value,
+        "answer_type": "mc",
+        "question_type": "mc",
+        "mc_source_type": mc_source_type,
+        "question_id": f"mc_{question_id_base}",
+        "primary_object": primary_object,
+        "objects": objects_list,
+        "choices": {labels[i]: all_values[i] for i in range(4)},
+    }
+
+
+def construct_mc_object_size_qa(obj: SceneObject, dimension: str = 'length') -> Optional[Dict[str, Any]]:
+    """MC version of object_size: What is the {dimension} of {object}?"""
+    obj_length, obj_width, obj_height = get_object_size(obj)
+    value_map = {'length': obj_length, 'width': obj_width, 'height': obj_height}
+    value = round(value_map[dimension], 2)
+
+    base_q = question_templates.OBJECT_SIZE_TEMPLATE.format(object=obj.label, dimension=dimension)
+    return _format_mc_question(
+        base_question=base_q,
+        correct_value=value,
+        question_id_base=f"object_size_{obj.id}_{dimension}",
+        primary_object=obj.id,
+        objects_list=[obj.to_dict()],
+        mc_source_type="object_size",
+    )
+
+
+def construct_mc_object_distance_to_camera_qa(obj: SceneObject, camera_pose: CameraPose) -> Optional[Dict[str, Any]]:
+    """MC version of object_distance_to_camera."""
+    distance = round(calculate_distance_to_camera(obj, camera_pose), 2)
+
+    base_q = question_templates.OBJECT_DISTANCE_TO_CAMERA_TEMPLATE.format(object=obj.label)
+    result = _format_mc_question(
+        base_question=base_q,
+        correct_value=distance,
+        question_id_base=f"object_distance_to_camera_{obj.id}",
+        primary_object=obj.id,
+        objects_list=[obj.to_dict()],
+        mc_source_type="object_distance_to_camera",
+    )
+    result["camera_pose"] = camera_pose.to_dict()
+    return result
+
+
+def construct_mc_object_pair_distance_center_qa(obj1: SceneObject, obj2: SceneObject) -> Optional[Dict[str, Any]]:
+    """MC version of object_pair_distance_center."""
+    distance = round(calculate_distance(obj1, obj2), 2)
+
+    base_q = question_templates.OBJECT_PAIR_DISTANCE_CENTER_TEMPLATE.format(
+        object1=obj1.label, object2=obj2.label
+    )
+    return _format_mc_question(
+        base_question=base_q,
+        correct_value=distance,
+        question_id_base=f"object_pair_distance_center_{obj1.id}_{obj2.id}",
+        primary_object=obj1.id,
+        objects_list=[obj1.to_dict(), obj2.to_dict()],
+        mc_source_type="object_pair_distance_center",
+    )
+
 
 # Maps question type to constructor function
 QUESTION_CONSTRUCTORS = {
@@ -379,4 +632,7 @@ QUESTION_CONSTRUCTORS = {
     'object_pair_distance_vector': construct_object_pair_distance_vector_qa,
     'object_comparison_absolute_distance': construct_object_comparison_absolute_distance_qa,
     'object_comparison_relative_distance': construct_object_comparison_relative_distance_qa,
+    'relative_size': construct_relative_size_qa,
+    'relative_distance': construct_relative_distance_qa,
+    'relative_distance_to_camera': construct_relative_distance_to_camera_qa,
 }

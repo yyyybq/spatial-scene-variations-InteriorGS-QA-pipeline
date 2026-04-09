@@ -335,12 +335,12 @@ class InteriorGSQuestionPipeline:
             return []
         
         # Get all scene objects first (needed for visibility checking)
-        all_scene_objects = self.object_selector.load_scene_objects(scene_path)
+        all_scene_objects = self.object_selector.select_single_objects(scene_path)
         if not all_scene_objects:
-            print(f"  [Warning] No objects found in scene")
+            print(f"  [Warning] No valid objects found in scene")
             return []
         
-        print(f"  Loaded {len(all_scene_objects)} objects from scene")
+        print(f"  Loaded {len(all_scene_objects)} valid objects from scene")
         
         # Build AABBs for visibility checking (reuse existing helper)
         all_scene_aabbs = [scene_object_to_aabb(obj) for obj in all_scene_objects]
@@ -762,6 +762,8 @@ class InteriorGSQuestionPipeline:
                 with open(scene_output / 'questions.jsonl', 'w', encoding='utf-8') as f:
                     for q in questions:
                         f.write(json.dumps(q, ensure_ascii=False) + '\n')
+                # Save split by category (mc/ and numerical/)
+                self._save_questions_by_category(questions, scene_output, verbose=False)
             
             all_questions.extend(questions)
         
@@ -774,6 +776,10 @@ class InteriorGSQuestionPipeline:
         # Also save as JSON for compatibility
         with open(self.output_dir / 'questions.json', 'w', encoding='utf-8') as f:
             json.dump(all_questions, f, indent=2, ensure_ascii=False)
+        
+        # Save split by category at top level too
+        if all_questions:
+            self._save_questions_by_category(all_questions, self.output_dir, verbose=verbose)
         
         # Save metadata
         question_stats = self._get_question_statistics(all_questions)
@@ -853,6 +859,9 @@ class InteriorGSQuestionPipeline:
             for q in questions:
                 f.write(json.dumps(q, ensure_ascii=False) + '\n')
         
+        # Save split by category (mc/ and numerical/)
+        self._save_questions_by_category(questions, scene_output, verbose=verbose)
+        
         # Save metadata
         question_stats = self._get_question_statistics(questions)
         metadata = {
@@ -877,6 +886,92 @@ class InteriorGSQuestionPipeline:
             print("=" * 60)
         
         return questions
+    
+    def _save_questions_by_category(self, questions: List[Dict[str, Any]], base_dir: Path,
+                                      verbose: bool = True) -> None:
+        """
+        Save questions split into mc/ and numerical/ folders, with sub-folders per task type.
+        
+        Directory structure:
+            base_dir/
+                mc/
+                    relative_size/questions.jsonl
+                    relative_distance/questions.jsonl
+                    relative_distance_to_camera/questions.jsonl
+                    mc_object_size/questions.jsonl          (MC-wrapped numerical)
+                    mc_object_distance_to_camera/questions.jsonl
+                    mc_object_pair_distance_center/questions.jsonl
+                    all_mc.jsonl                            (combined)
+                numerical/
+                    object_size/questions.jsonl
+                    object_distance_to_camera/questions.jsonl
+                    object_pair_distance_center/questions.jsonl
+                    object_pair_distance_vector/questions.jsonl
+                    ...
+                    all_numerical.jsonl                     (combined)
+        """
+        from collections import defaultdict
+        
+        mc_questions = []
+        numerical_questions = []
+        
+        # Split by answer_type
+        for q in questions:
+            answer_type = q.get('answer_type', 'numerical')
+            if answer_type == 'mc':
+                mc_questions.append(q)
+            else:
+                numerical_questions.append(q)
+        
+        # Group by question_type within each category
+        mc_by_type = defaultdict(list)
+        for q in mc_questions:
+            q_type = q.get('question_type', 'unknown')
+            # For MC-wrapped numerical questions, use mc_source_type as sub-key
+            if q_type == 'mc':
+                sub_type = f"mc_{q.get('mc_source_type', 'unknown')}"
+            else:
+                sub_type = q_type
+            mc_by_type[sub_type].append(q)
+        
+        numerical_by_type = defaultdict(list)
+        for q in numerical_questions:
+            q_type = q.get('question_type', 'unknown')
+            numerical_by_type[q_type].append(q)
+        
+        # Save MC questions
+        mc_dir = base_dir / 'mc'
+        mc_dir.mkdir(parents=True, exist_ok=True)
+        for sub_type, qs in mc_by_type.items():
+            sub_dir = mc_dir / sub_type
+            sub_dir.mkdir(parents=True, exist_ok=True)
+            with open(sub_dir / 'questions.jsonl', 'w', encoding='utf-8') as f:
+                for q in qs:
+                    f.write(json.dumps(q, ensure_ascii=False) + '\n')
+        # Combined MC file
+        if mc_questions:
+            with open(mc_dir / 'all_mc.jsonl', 'w', encoding='utf-8') as f:
+                for q in mc_questions:
+                    f.write(json.dumps(q, ensure_ascii=False) + '\n')
+        
+        # Save numerical questions
+        num_dir = base_dir / 'numerical'
+        num_dir.mkdir(parents=True, exist_ok=True)
+        for sub_type, qs in numerical_by_type.items():
+            sub_dir = num_dir / sub_type
+            sub_dir.mkdir(parents=True, exist_ok=True)
+            with open(sub_dir / 'questions.jsonl', 'w', encoding='utf-8') as f:
+                for q in qs:
+                    f.write(json.dumps(q, ensure_ascii=False) + '\n')
+        # Combined numerical file
+        if numerical_questions:
+            with open(num_dir / 'all_numerical.jsonl', 'w', encoding='utf-8') as f:
+                for q in numerical_questions:
+                    f.write(json.dumps(q, ensure_ascii=False) + '\n')
+        
+        if verbose:
+            print(f"  Saved {len(mc_questions)} MC questions ({len(mc_by_type)} sub-types)")
+            print(f"  Saved {len(numerical_questions)} numerical questions ({len(numerical_by_type)} sub-types)")
     
     def _get_question_statistics(self, questions: List[Dict[str, Any]]) -> Dict[str, int]:
         """Get statistics about generated questions by type."""

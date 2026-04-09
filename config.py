@@ -139,6 +139,12 @@ class QuestionConfig:
         "object_comparison_relative_distance",
         # Vector questions
         "object_pair_distance_vector",
+        # Relative (Yes/No) questions
+        "relative_size",
+        "relative_distance",
+        "relative_distance_to_camera",
+        # Multiple choice
+        "mc",
     ])
     
     # Dimensions to use for size comparisons

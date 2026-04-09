@@ -10,9 +10,8 @@ adapted from sceneshift/question_generation/question_templates.py.
 # ==============================================================================
 
 OBJECT_SIZE_TEMPLATE = """
-What is the estimated length, width, and height of the {object} in this scene in meters? 
+What is the estimated {dimension} of the {object} in this scene in meters? 
 Length and width are the two dimensions that define the 'base' of the object. Of these two base dimensions, let length be the longer and width be the shorter.
-The answer should be in the format: [length, width, height].
 """.strip()
 
 OBJECT_SIZE_COMPARISON_RELATIVE_TEMPLATE = """
@@ -74,19 +73,66 @@ Please assume the distance is measured from the approximated center of each obje
 """.strip()
 
 NA_POST_PROMPT = """
-The answer should be a single NUMBER given to one decimal place.
+The answer should be a single NUMBER given to two decimal places.
 """.strip()
 
 MCA_POST_PROMPT = """
 The answer should be the single multiple-choice LETTER answer, formatted as a string.
 """.strip()
 
-POST_PROMPT = """
+VECTOR_POST_PROMPT = """
+The answer should be a 3-element vector [x, y, z] with each component given to two decimal places.
+""".strip()
+
+# Type-specific output prompts (each question type should use exactly ONE of these)
+POST_PROMPT_NA = """
 [Hints]
 Note that the field-of-view of the camera is 60 degrees.
 
 [Output]
-You have to end your response with the answer formatted in a dictionary: {'answer': <answer>}. For example, {'answer': 'Z'} or {'answer': 0} or {'answer': [0, 0, 0]}, depending on the question.
+You have to end your response with the answer formatted in a dictionary: {'answer': <number>}. For example, {'answer': 1.25}.
+""".strip()
+
+POST_PROMPT_MC = """
+[Hints]
+Note that the field-of-view of the camera is 60 degrees.
+
+[Output]
+You have to end your response with the answer formatted in a dictionary: {'answer': '<letter>'}. For example, {'answer': 'A'}.
+""".strip()
+
+POST_PROMPT_VECTOR = """
+[Hints]
+Note that the field-of-view of the camera is 60 degrees.
+
+[Output]
+You have to end your response with the answer formatted in a dictionary: {'answer': [x, y, z]}. For example, {'answer': [1.25, -0.50, 3.00]}.
+""".strip()
+
+# ==============================================================================
+# RELATIVE (YES/NO) QUESTIONS
+# ==============================================================================
+
+RELATIVE_SIZE_TEMPLATE = """
+Is the {object1} larger than the {object2}?
+""".strip()
+
+RELATIVE_DISTANCE_TEMPLATE = """
+Is the distance between the {object1} and the {object2} larger than the distance between the {object1} and the {object3}?
+""".strip()
+
+RELATIVE_DISTANCE_TO_CAMERA_TEMPLATE = """
+Is the {object1} further from the camera than the {object2}?
+""".strip()
+
+# ==============================================================================
+# MULTIPLE CHOICE QUESTIONS
+# ==============================================================================
+
+MC_TEMPLATE = """
+{base_question}
+
+{choices}
 """.strip()
 
 # ==============================================================================
@@ -103,6 +149,10 @@ QUESTION_TYPE_TO_TEMPLATE = {
     'object_pair_distance_center_w_size': OBJECT_PAIR_DISTANCE_CENTER_W_SIZE_TEMPLATE,
     'object_distance_to_camera': OBJECT_DISTANCE_TO_CAMERA_TEMPLATE,
     'object_pair_distance_vector': OBJECT_PAIR_DISTANCE_VECTOR_TEMPLATE,
+    'relative_size': RELATIVE_SIZE_TEMPLATE,
+    'relative_distance': RELATIVE_DISTANCE_TEMPLATE,
+    'relative_distance_to_camera': RELATIVE_DISTANCE_TO_CAMERA_TEMPLATE,
+    'mc': MC_TEMPLATE,
 }
 
 # Question types categorized by number of objects required
@@ -117,9 +167,12 @@ PAIR_OBJECT_QUESTIONS = [
     'object_pair_distance_center',
     'object_pair_distance_center_w_size',
     'object_pair_distance_vector',
+    'relative_size',
+    'relative_distance_to_camera',
 ]
 
 MULTI_OBJECT_QUESTIONS = [
     'object_comparison_absolute_distance',
     'object_comparison_relative_distance',
+    'relative_distance',
 ]
