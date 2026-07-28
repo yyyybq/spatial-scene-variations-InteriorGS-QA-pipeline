@@ -687,30 +687,27 @@ class CameraSampler:
         
         return True
     
-    def sample_cameras(self, scene_path: Path, 
+    def sample_cameras(self, scene_path: Path,
                        objects: List[SceneObject],
                        num_samples: int = 5,
                        all_scene_objects: Optional[List[SceneObject]] = None) -> List[CameraPose]:
-        """Sample multiple valid camera poses for given objects.
-        
-        For linear pattern: Returns a single trajectory with multiple poses.
-        For other patterns: Returns independent camera poses.
-        """
-        # For linear pattern, use generate_linear_poses to get a proper trajectory
-        if self.config.move_pattern == 'linear':
-            return self.generate_linear_poses(scene_path, objects, all_scene_objects)
-        
-        # For other patterns, sample independent poses
+        """Sample num_samples independent camera poses for given objects.
+
+        For all patterns (around, spherical, linear): returns num_samples independent
+        single-viewpoint poses, each sampled at a different random radius and initial
+        angle.  For 'linear', each pose is an independent approach starting position
+        (looking toward the target) rather than a full trajectory sequence.
+        """ 
         poses = []
         attempts = 0
-        max_total_attempts = num_samples * 10
-        
+        max_total_attempts = num_samples * 20  # generous budget for validity checks
+
         while len(poses) < num_samples and attempts < max_total_attempts:
             pose = self.sample_camera_pose(objects, scene_path, all_scene_objects)
             if pose is not None:
                 poses.append(pose)
             attempts += 1
-        
+
         return poses
     
     def get_intrinsics_dict(self) -> Dict[str, Any]:

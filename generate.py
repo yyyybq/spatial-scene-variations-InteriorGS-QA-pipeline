@@ -17,6 +17,7 @@ import json
 import time
 import random
 import argparse
+from collections import Counter
 from pathlib import Path
 from itertools import combinations
 
@@ -29,29 +30,53 @@ from scenes import DEFAULT_SCENES, QUESTION_TYPES, PATTERNS
 random.seed(42)
 
 SCENES_ROOT = "/scratch/by2593/project/Active_Spatial/InteriorGS"
-DEFAULT_OUTPUT = "/scratch/by2593/project/sceneshift/data/sceneshift_bench_50_v4"
+DEFAULT_OUTPUT = "/scratch/by2593/project/sceneshift/data/sceneshift_bench_200_v1"
 
 MAX_OBJECTS_PER_SCENE = 5
 MIN_OBJECTS_PER_SCENE = 3
 
 
-def select_focus_objects(scene_path: Path, max_objects: int = MAX_OBJECTS_PER_SCENE) -> list:
+def select_focus_objects(
+    scene_path: Path,
+    max_objects: int = MAX_OBJECTS_PER_SCENE,
+    global_category_counts: Counter = None,
+) -> list:
     """Select 3-5 diverse objects from a scene.
-    
-    Deduplicates by label (keeps largest instance), then takes top by volume.
+
+    Deduplicates by label (keeps largest instance per label), then sorts
+    candidates by (global_category_count ASC, volume DESC) so that
+    under-represented categories are preferred across the full dataset.
+
+    Args:
+        scene_path: Path to the scene directory.
+        max_objects: Maximum number of focus objects to select.
+        global_category_counts: Counter tracking how many times each label
+            has been selected as a focus object so far.  Pass None (or an
+            empty Counter) to fall back to pure volume-based selection.
     """
+    if global_category_counts is None:
+        global_category_counts = Counter()
+
     obj_selector = ObjectSelector(ObjectSelectionConfig())
     all_valid = obj_selector.select_single_objects(scene_path)
 
     if len(all_valid) <= max_objects:
         return all_valid
 
+    # Keep only the largest instance per label
     by_label = {}
     for obj in all_valid:
         if obj.label not in by_label or obj.volume > by_label[obj.label].volume:
             by_label[obj.label] = obj
 
-    unique_objs = sorted(by_label.values(), key=lambda o: o.volume, reverse=True)
+    # Primary sort key: how often this category has already been selected
+    # (ascending) so rare categories get priority.
+    # Secondary sort key: volume (descending) to break ties in favour of
+    # larger, more visually prominent objects.
+    unique_objs = sorted(
+        by_label.values(),
+        key=lambda o: (global_category_counts[o.label], -o.volume),
+    )
     return unique_objs[:max_objects]
 
 
@@ -73,7 +98,7 @@ def run_scene_pattern(scene_id, focus_objects, focus_pairs, pattern, num_cameras
     from question_generator import QuestionGenerator
 
     cam_cfg = CameraSamplingConfig(
-        num_cameras_per_item=num_cameras,
+        num_cameras_per_item=num_cameras if num_cameras is not None else 12,  # rotation uses 12 (30° × 12 = 360°)
         move_pattern=pattern,
         max_tries=100,
         skip_occlusion_check=True,
@@ -129,7 +154,8 @@ def run_scene_pattern(scene_id, focus_objects, focus_pairs, pattern, num_cameras
             return []
 
         all_rot_poses = [pose for pose, _ in rotation_results]
-        MAX_ROTATION_POSES = 6
+        # rotation_interval=30° → 12 poses per room; no cap needed
+        MAX_ROTATION_POSES = 12
         if len(all_rot_poses) > MAX_ROTATION_POSES:
             step = max(1, len(all_rot_poses) // MAX_ROTATION_POSES)
             all_rot_poses = all_rot_poses[::step][:MAX_ROTATION_POSES]
@@ -208,17 +234,28 @@ def main():
     total_runs = len(scenes) * len(PATTERNS)
     done = 0
 
+    # Tracks how many times each object category has been selected as a focus
+    # object across all processed scenes, enabling diversity-aware selection.
+    global_category_counts: Counter = Counter()
+
     obj_selector = ObjectSelector(ObjectSelectionConfig())
 
     for si, scene_id in enumerate(scenes):
         scene_path = Path(SCENES_ROOT) / scene_id
-        focus_objects = select_focus_objects(scene_path, args.max_objects)
+        focus_objects = select_focus_objects(
+            scene_path, args.max_objects, global_category_counts
+        )
 
         if len(focus_objects) < args.min_objects:
             print(f"\n[SKIP] {scene_id}: only {len(focus_objects)} objects (need {args.min_objects})")
             skipped.append(scene_id)
             done += len(PATTERNS)
             continue
+
+        # Update global category counts before generating questions so that
+        # subsequent scenes can see which categories are already well-covered.
+        for obj in focus_objects:
+            global_category_counts[obj.label] += 1
 
         focus_pairs = select_focus_pairs(focus_objects)
         focus_labels = [o.label for o in focus_objects]
@@ -288,6 +325,7 @@ def main():
         "max_objects_per_scene": args.max_objects,
         "elapsed_minutes": round(elapsed / 60, 1),
         "failed": failed,
+        "category_counts": dict(global_category_counts.most_common()),
     }
     with open(f"{output_base}/generation_summary.json", "w") as f:
         json.dump(summary, f, indent=2)

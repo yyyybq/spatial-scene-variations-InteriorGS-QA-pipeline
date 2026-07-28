@@ -177,6 +177,53 @@ class RenderConfig:
     gpu_device: int = None  # None = auto
 
 
+@dataclass
+class VideoTrajectoryConfig:
+    """Configuration for video trajectory generation.
+    
+    Each QA data × each move pattern → num_trajectories different video trajectories.
+    Each trajectory is a dense sequence of camera poses rendered into a video.
+    """
+    
+    # Number of distinct trajectories per (object, pattern) combination
+    num_trajectories: int = 10
+    
+    # Video parameters
+    fps: int = 10                        # Frames per second for output video
+    duration_sec: float = 3.0            # Duration of each video (seconds)
+    num_frames: int = 30                 # Total frames = fps × duration_sec
+    
+    # Frame dimensions (for rendering)
+    frame_width: int = 640
+    frame_height: int = 480
+    fov_deg: float = 60.0
+    
+    # Output format: 'mp4' for video files, 'frames' for PNG frame directories
+    output_format: str = "mp4"
+    
+    # Trajectory smoothness
+    smooth_interpolation: bool = True    # Use cubic spline interpolation for smooth paths
+    
+    # Pattern-specific trajectory parameters
+    # -- around pattern --
+    around_arc_range_deg: float = 120.0  # Angular range of arc (degrees)
+    
+    # -- spherical pattern --
+    spherical_arc_range_deg: float = 90.0  # Angular range on sphere
+    
+    # -- linear pattern --
+    linear_total_distance: float = 1.5   # Total walk distance (meters)
+    
+    # -- rotation pattern --
+    rotation_sweep_deg: float = 120.0    # Rotation sweep range (degrees)
+    
+    # Retry parameters
+    max_trajectory_attempts: int = 50    # Max attempts to find a valid trajectory
+    
+    # Reference frame for camera-dependent answers
+    reference_frame: str = "middle"      # "first", "middle", "last"
+
+
 @dataclass 
 class PipelineConfig:
     """Main configuration for the entire pipeline."""
